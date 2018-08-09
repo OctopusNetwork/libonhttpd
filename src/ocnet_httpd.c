@@ -11,9 +11,9 @@
 #include "tcp_connection.h"
 #include "tcp_server.h"
 
-#include "onhttpd.h"
+#include "ocnet_httpd.h"
 
-#include "on_connection.h"
+#include "ocnet_connection.h"
 
 #define ONC_HTTPD_MAX_CONNS     128
 #define ONC_SERVER_MAX_CONNS    32
@@ -25,17 +25,17 @@
 typedef struct {
     void               *tcp_conn;
     void               *http_request;
-    onc_connection_s_t *onc_conn;
+    ocnet_connection_t *ocnet_conn;
     char               *wbuf;
     char               *swapbuf;
     char                datalen;
     struct list_head    link;
-} onc_conncon_s_t;
+} ocnet_conncon_t;
 
 typedef struct {
     void               *listener;
     struct list_head    link;
-} onc_httpserver_s_t;
+} ocnet_httpserver_s_t;
 
 typedef struct {
     unsigned int        internal_evgrp: 1,
@@ -47,18 +47,18 @@ typedef struct {
     int                 msgbuf_pid;
     void               *acceptor;
     void               *processor;
-} onc_httpd_s_t;
+} ocnet_httpd_s_t;
 
-static onc_httpd_s_t    g_httpd;
+static ocnet_httpd_s_t    g_httpd;
 
-static int __on_read(onc_conncon_s_t *conn, void *lfds)
+static int __on_read(ocnet_conncon_t *conn, void *lfds)
 {
     void *tcp_conn = conn->tcp_conn;
     if (0 != tcp_connection_readable(tcp_conn, lfds)) {
         char buf[1024] = {0};
         int readlen = tcp_connection_read(tcp_conn, buf, sizeof(buf));
         if (0 < readlen) {
-            onc_connection_feed(conn->onc_conn, buf, readlen);
+            ocnet_connection_feed(conn->ocnet_conn, buf, readlen);
         } else if (readlen < 0) {
             return -1;
         }
@@ -66,24 +66,24 @@ static int __on_read(onc_conncon_s_t *conn, void *lfds)
     return 0;
 }
 
-static int __on_error(onc_conncon_s_t *conn, void *lfds)
+static int __on_error(ocnet_conncon_t *conn, void *lfds)
 {
     void *tcp_conn = conn->tcp_conn;
     return tcp_connection_error(tcp_conn, lfds);
 }
 
-static int __on_write(onc_conncon_s_t *conn, void *lfds)
+static int __on_write(ocnet_conncon_t *conn, void *lfds)
 {
     void *tcp_conn = conn->tcp_conn;
-    onc_connection_s_t *onc_conn = conn->onc_conn;
+    ocnet_connection_t *ocnet_conn = conn->ocnet_conn;
 
-    if (0 == onc_connection_eof(onc_conn)) {
+    if (0 == ocnet_connection_eof(ocnet_conn)) {
         if (0 != tcp_connection_writable(tcp_conn, lfds) ||
-                0 != onc_connection_data_available(onc_conn, lfds)) {
+                0 != ocnet_connection_data_available(ocnet_conn, lfds)) {
             int writelen = 0;
             int buflen = sizeof(conn->wbuf) - conn->datalen;
-            int grablen = onc_connection_grab(
-                    onc_conn, conn->wbuf + conn->datalen, buflen);
+            int grablen = ocnet_connection_grab(
+                    ocnet_conn, conn->wbuf + conn->datalen, buflen);
 
             /**
              *  If buf is fill, maybe more data available
@@ -105,9 +105,9 @@ static int __on_write(onc_conncon_s_t *conn, void *lfds)
                     int datalen = conn->datalen;
                     conn->datalen -= writelen;
                     if (writelen < datalen) {
-                        onc_memcpy(conn->swapbuf, conn->wbuf + writelen,
+                        ocnet_memcpy(conn->swapbuf, conn->wbuf + writelen,
                                 conn->datalen);
-                        onc_memcpy(conn->wbuf, conn->swapbuf, conn->datalen);
+                        ocnet_memcpy(conn->wbuf, conn->swapbuf, conn->datalen);
                         tcp_connection_wait_writable(conn->tcp_conn);
                     }
                 } else if (writelen < 0) {
@@ -120,25 +120,25 @@ static int __on_write(onc_conncon_s_t *conn, void *lfds)
 }
 
 static void __destroy_connection(
-        onc_httpd_s_t *httpd, onc_conncon_s_t *conn)
+        ocnet_httpd_s_t *httpd, ocnet_conncon_t *conn)
 {
-    onc_free(conn->swapbuf);
-    onc_free(conn->wbuf);
-    onc_connection_del(conn->onc_conn);
-    onc_mutex_lock(httpd->conn_mutex);
+    ocnet_free(conn->swapbuf);
+    ocnet_free(conn->wbuf);
+    ocnet_connection_del(conn->ocnet_conn);
+    ocnet_mutex_lock(httpd->conn_mutex);
     list_del(&conn->link);
     if (1 == httpd->internal_evgrp) {
         tcp_connection_event_del(conn->tcp_conn, httpd->evgrp);
     }
-    onc_mutex_unlock(httpd->conn_mutex);
+    ocnet_mutex_unlock(httpd->conn_mutex);
     tcp_connection_del(conn->tcp_conn);
-    onc_free(conn);
+    ocnet_free(conn);
 }
 
-static int __on_event(onc_httpd_s_t *httpd, void *lfds)
+static int __on_event(ocnet_httpd_s_t *httpd, void *lfds)
 {
-    onc_conncon_s_t *conn = NULL;
-    onc_conncon_s_t *p = NULL;
+    ocnet_conncon_t *conn = NULL;
+    ocnet_conncon_t *p = NULL;
 
     list_for_each_entry_safe(conn, p, &httpd->conn_list, link) {
         if (__on_read(conn, lfds) < 0) {
@@ -165,8 +165,8 @@ static int __on_event(onc_httpd_s_t *httpd, void *lfds)
 
 static void *__processor(void *arg)
 {
-    onc_httpd_s_t *httpd = (onc_httpd_s_t *)arg;
-    void *lfds = onc_lfds_new();
+    ocnet_httpd_s_t *httpd = (ocnet_httpd_s_t *)arg;
+    void *lfds = ocnet_lfds_new();
 
     if (NULL == lfds) {
         return NULL;
@@ -174,7 +174,7 @@ static void *__processor(void *arg)
 
     do {
         int rc = 0;
-        rc = onc_evgrp_wait(httpd->evgrp, ONC_EVENT_TIMEOUT, lfds);
+        rc = ocnet_evgrp_wait(httpd->evgrp, ONC_EVENT_TIMEOUT, lfds);
         if (rc < 0) {
             LOGI(TAG, "event wait error");
         } else if (0 < rc) {
@@ -184,62 +184,62 @@ static void *__processor(void *arg)
         }
     } while (1 == httpd->running);
 
-    onc_lfds_del(lfds);
+    ocnet_lfds_del(lfds);
 
     return NULL;
 }
 
-static onc_conncon_s_t *__create_connection(
-        onc_httpd_s_t *httpd, void *tcp_conn)
+static ocnet_conncon_t *__create_connection(
+        ocnet_httpd_s_t *httpd, void *tcp_conn)
 {
-    onc_connection_s_t *onc_conn = NULL;
-    onc_conncon_s_t *conncon = NULL;
+    ocnet_connection_t *ocnet_conn = NULL;
+    ocnet_conncon_t *conncon = NULL;
 
-    conncon = onc_malloc(sizeof(onc_conncon_s_t));
+    conncon = ocnet_malloc(sizeof(ocnet_conncon_t));
     if (NULL == conncon) {
         return NULL;
     }
 
-    conncon->wbuf = onc_malloc(ONC_WRITE_BUFLEN);
+    conncon->wbuf = ocnet_malloc(ONC_WRITE_BUFLEN);
     if (NULL == conncon->wbuf) {
         goto L_ERROR_WBUF_ALLOC;
     }
 
-    conncon->swapbuf = onc_malloc(ONC_WRITE_BUFLEN);
+    conncon->swapbuf = ocnet_malloc(ONC_WRITE_BUFLEN);
     if (NULL == conncon->swapbuf) {
         goto L_ERROR_SWAPBUF_ALLOC;
     }
 
-    onc_conn = onc_connection_new(httpd->evgrp);
-    if (NULL == onc_conn) {
+    ocnet_conn = ocnet_connection_new(httpd->evgrp);
+    if (NULL == ocnet_conn) {
         goto L_ERROR_ONCCONN_NEW;
     }
 
-    conncon->onc_conn = onc_conn;
+    conncon->ocnet_conn = ocnet_conn;
     conncon->tcp_conn = tcp_conn;
     conncon->datalen = 0;
     INIT_LIST_HEAD(&conncon->link);
-    onc_mutex_lock(httpd->conn_mutex);
+    ocnet_mutex_lock(httpd->conn_mutex);
     list_add_tail(&conncon->link, &httpd->conn_list);
     if (1 == httpd->internal_evgrp) {
         tcp_connection_event_enroll(tcp_conn, httpd->evgrp);
     }
-    onc_mutex_unlock(httpd->conn_mutex);
+    ocnet_mutex_unlock(httpd->conn_mutex);
 
     return conncon;
 
 L_ERROR_ONCCONN_NEW:
-    onc_free(conncon->swapbuf);
+    ocnet_free(conncon->swapbuf);
 L_ERROR_SWAPBUF_ALLOC:
-    onc_free(conncon->wbuf);
+    ocnet_free(conncon->wbuf);
 L_ERROR_WBUF_ALLOC:
-    onc_free(conncon);
+    ocnet_free(conncon);
     return NULL;
 }
 
 static void *__acceptor(void *arg)
 {
-    onc_httpd_s_t *httpd = (onc_httpd_s_t *)arg;
+    ocnet_httpd_s_t *httpd = (ocnet_httpd_s_t *)arg;
 
     do {
         void *conn = tcp_server_accept(ONC_EVENT_TIMEOUT);
@@ -251,13 +251,13 @@ static void *__acceptor(void *arg)
     return NULL;
 }
 
-int onc_httpd_init(int internal_evgrp, void *evgrp)
+int ocnet_httpd_init(int internal_evgrp, void *evgrp)
 {
     if (tcp_server_init(1, NULL, 2) < 0) {
         return -1;
     }
 
-    g_httpd.conn_mutex = onc_mutex_init();
+    g_httpd.conn_mutex = ocnet_mutex_init();
     if (NULL == g_httpd.conn_mutex) {
         goto L_ERROR_CONNMUTEX_CREATE;
     }
@@ -266,7 +266,7 @@ int onc_httpd_init(int internal_evgrp, void *evgrp)
 
     if (0 != internal_evgrp) {
         g_httpd.internal_evgrp = 1;
-        g_httpd.evgrp = onc_evgrp_create(ONC_HTTPD_MAX_CONNS);
+        g_httpd.evgrp = ocnet_evgrp_create(ONC_HTTPD_MAX_CONNS);
         if (NULL == g_httpd.evgrp) {
             goto L_ERROR_EVGRP_CREATE;
         }
@@ -283,23 +283,23 @@ int onc_httpd_init(int internal_evgrp, void *evgrp)
     return 0;
 
 L_ERROR_EVGRP_CREATE:
-    onc_mutex_destroy(g_httpd.conn_mutex);
+    ocnet_mutex_destroy(g_httpd.conn_mutex);
 L_ERROR_CONNMUTEX_CREATE:
     tcp_server_final();
     return -1;
 }
 
-int onc_httpd_listen(onc_ip_t ip, onc_port_t port)
+int ocnet_httpd_listen(ocnet_ip_t ip, ocnet_port_t port)
 {
     void *listener = NULL;
-    onc_httpserver_s_t *server = NULL;
+    ocnet_httpserver_s_t *server = NULL;
 
     listener = tcp_server_listen(ip, port, ONC_SERVER_MAX_CONNS);
     if (NULL == listener) {
         return -1;
     }
 
-    server = onc_malloc(sizeof(onc_httpserver_s_t));
+    server = ocnet_malloc(sizeof(ocnet_httpserver_s_t));
     if (NULL == server) {
         tcp_server_remove(listener);
         return -1;
@@ -313,51 +313,51 @@ int onc_httpd_listen(onc_ip_t ip, onc_port_t port)
     return 0;
 }
 
-int onc_httpd_start(void)
+int ocnet_httpd_start(void)
 {
     g_httpd.running = 1;
-    g_httpd.acceptor = onc_thread_create(__acceptor, &g_httpd);
+    g_httpd.acceptor = ocnet_thread_create(__acceptor, &g_httpd);
     if (NULL == g_httpd.acceptor) {
         return -1;
     }
 
-    g_httpd.processor = onc_thread_create(__processor, &g_httpd);
+    g_httpd.processor = ocnet_thread_create(__processor, &g_httpd);
     if (NULL == g_httpd.processor) {
         g_httpd.running = 0;
-        onc_thread_join(g_httpd.acceptor);
+        ocnet_thread_join(g_httpd.acceptor);
         return -1;
     }
 
     return 0;
 }
 
-void onc_httpd_stop(void)
+void ocnet_httpd_stop(void)
 {
     g_httpd.running = 0;
-    onc_thread_join(g_httpd.processor);
-    onc_thread_join(g_httpd.acceptor);
+    ocnet_thread_join(g_httpd.processor);
+    ocnet_thread_join(g_httpd.acceptor);
 }
 
-void onc_httpd_final(void)
+void ocnet_httpd_final(void)
 {
-    onc_httpserver_s_t *server = NULL;
-    onc_httpserver_s_t *n = NULL;
-    onc_conncon_s_t *conn = NULL;
-    onc_conncon_s_t *p = NULL;
+    ocnet_httpserver_s_t *server = NULL;
+    ocnet_httpserver_s_t *n = NULL;
+    ocnet_conncon_t *conn = NULL;
+    ocnet_conncon_t *p = NULL;
 
     list_for_each_entry_safe(conn, p, &g_httpd.conn_list, link) {
         tcp_connection_del(conn->tcp_conn);
         list_del(&conn->link);
-        onc_free(conn);
+        ocnet_free(conn);
     }
 
     list_for_each_entry_safe(server, n, &g_httpd.listener_list, link) {
         tcp_server_remove(server->listener);
         list_del(&server->link);
-        onc_free(server);
+        ocnet_free(server);
     }
 
-    onc_evgrp_destroy(g_httpd.evgrp);
-    onc_mutex_destroy(g_httpd.conn_mutex);
+    ocnet_evgrp_destroy(g_httpd.evgrp);
+    ocnet_mutex_destroy(g_httpd.conn_mutex);
     tcp_server_final();
 }

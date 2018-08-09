@@ -3,16 +3,16 @@
 
 #include "http_parser.h"
 
-#include "on_malloc.h"
+#include "ocnet_malloc.h"
 
-#include "onparser.h"
+#include "ocnet_parser.h"
 
-typedef struct onc_parser_s {
+struct ocnet_parser {
     http_parser_settings    settings;
     http_parser             parser;
 
-    onc_parser_cb_s_t       callbacks;
-} onc_parser_s_t;
+    ocnet_parser_cb_t       callbacks;
+};
 
 static int __on_message_begin(http_parser *parser)
 {
@@ -64,10 +64,10 @@ static int __on_chunk_complete(http_parser *parser)
     return 0;
 }
 
-onc_parser_s_t *onc_parser_new(onc_parser_cb_s_t *callbacks)
+ocnet_parser_t *ocnet_parser_new(ocnet_parser_cb_t *callbacks)
 {
-    onc_parser_s_t *parser =
-        onc_malloc(sizeof(onc_parser_s_t));
+    ocnet_parser_t *parser =
+        ocnet_malloc(sizeof(ocnet_parser_t));
 
     if (NULL == parser) {
         return NULL;
@@ -86,13 +86,13 @@ onc_parser_s_t *onc_parser_new(onc_parser_cb_s_t *callbacks)
     parser->settings.on_chunk_header = __on_chunk_header;
     parser->settings.on_chunk_complete = __on_chunk_complete;
 
-    onc_memcpy(&parser->callbacks, callbacks,
-            sizeof(onc_parser_cb_s_t));
+    ocnet_memcpy(&parser->callbacks, callbacks,
+            sizeof(ocnet_parser_cb_t));
 
     return parser;
 }
 
-int onc_parser_parse(onc_parser_s_t *parser, char *buf, int len)
+int ocnet_parser_parse(ocnet_parser_t *parser, char *buf, int len)
 {
     int parsed_bytes = 0;
 
@@ -106,7 +106,7 @@ int onc_parser_parse(onc_parser_s_t *parser, char *buf, int len)
     return -1;
 }
 
-void onc_parser_del(onc_parser_s_t *parser)
+void ocnet_parser_del(ocnet_parser_t *parser)
 {
     free(parser);
 }

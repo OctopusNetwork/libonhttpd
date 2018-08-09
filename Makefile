@@ -8,8 +8,9 @@ TARGET_ARCHIVE = libonhttpd.a
 MODULENAME = libonhttpd
 MODULEVERSION = 0.1.0
 
-COMMON_INCLUDE_DIRS += $(rootdir)/source/$(MODULENAME)/include      \
-                       $(incdir)/libonplatform $(incdir)/libonevent
+COMMON_INCLUDE_DIRS += $(rootdir)/source/$(MODULENAME)/include              \
+                       $(incdir)/libonplatform $(incdir)/libonevent         \
+                       $(incdir)/liboncommunication $(incdir)/libontcpeng
 COMMON_SRC_FILES := $(rootdir)/source/$(MODULENAME)/src/ocnet_connection.c          \
                     $(rootdir)/source/$(MODULENAME)/src/ocnet_httpd.c               \
                     $(rootdir)/source/$(MODULENAME)/src/ocnet_parser.c              \

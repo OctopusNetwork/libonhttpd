@@ -1,20 +1,20 @@
 #ifndef __ONC_PARSER____H__
 #define __ONC_PARSER____H__
 
-struct onc_parser_s;
-typedef struct onc_parser_s     onc_parser_s_t;
+struct ocnet_parser;
+typedef struct ocnet_parser     ocnet_parser_t;
 
 typedef struct {
     int     fd;
-} onc_parser_cb_s_t;
+} ocnet_parser_cb_t;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-onc_parser_s_t  *onc_parser_new(onc_parser_cb_s_t *callbacks);
-int              onc_parser_parse(onc_parser_s_t *parser, char *buf, int len);
-void             onc_parser_del(onc_parser_s_t *parser);
+ocnet_parser_t  *ocnet_parser_new(ocnet_parser_cb_t *callbacks);
+int              ocnet_parser_parse(ocnet_parser_t *parser, char *buf, int len);
+void             ocnet_parser_del(ocnet_parser_t *parser);
 
 #ifdef __cplusplus
 }

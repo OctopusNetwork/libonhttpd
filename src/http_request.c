@@ -1,44 +1,44 @@
 #include <stdint.h>
 
-#include "on_malloc.h"
+#include "ocnet_malloc.h"
 
 #include "http_request.h"
-#include "on_parser.h"
+#include "ocnet_parser.h"
 
-typedef struct onc_httpreq_s {
-    onc_parser_s_t *onc_parser;
-} onc_httpreq_s_t;
+typedef struct ocnet_httpreq {
+    ocnet_parser_t *ocnet_parser;
+} ocnet_httpreq_t;
 
-onc_httpreq_s_t *http_request_new(void)
+ocnet_httpreq_t *http_request_new(void)
 {
-    onc_httpreq_s_t *request = NULL;
-    onc_parser_cb_s_t callbacks;
+    ocnet_httpreq_t *request = NULL;
+    ocnet_parser_cb_t callbacks;
 
-    request = onc_malloc(sizeof(onc_httpreq_s_t));
+    request = ocnet_malloc(sizeof(ocnet_httpreq_t));
     if (NULL == request) {
         return NULL;
     }
 
-    request->onc_parser = onc_parser_new(&callbacks);
-    if (NULL == request->onc_parser) {
+    request->ocnet_parser = ocnet_parser_new(&callbacks);
+    if (NULL == request->ocnet_parser) {
         goto L_ERROR_KKTPARSER_NEW;
     }
 
     return request;
 
 L_ERROR_KKTPARSER_NEW:
-    onc_free(request);
+    ocnet_free(request);
     return NULL;
 }
 
-void http_request_del(onc_httpreq_s_t *request)
+void http_request_del(ocnet_httpreq_t *request)
 {
-    onc_parser_del(request->onc_parser);
-    onc_free(request);
+    ocnet_parser_del(request->ocnet_parser);
+    ocnet_free(request);
 }
 
-int http_request_parse(onc_httpreq_s_t *request,
+int http_request_parse(ocnet_httpreq_t *request,
         const char *buf, int len)
 {
-    return onc_parser_parse(request->onc_parser, (char *)buf, len);
+    return ocnet_parser_parse(request->ocnet_parser, (char *)buf, len);
 }

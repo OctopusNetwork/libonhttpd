@@ -1,21 +1,21 @@
 #ifndef __ONC_CONNECTION____H__
 #define __ONC_CONNECTION____H__
 
-struct onc_connection_s;
-typedef struct onc_connection_s onc_connection_s_t;
+struct ocnet_connection;
+typedef struct ocnet_connection ocnet_connection_t;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-onc_connection_s_t *onc_connection_new(void *evgrp);
-int  onc_connection_feed(onc_connection_s_t *onc_conn,
+ocnet_connection_t *ocnet_connection_new(void *evgrp);
+int  ocnet_connection_feed(ocnet_connection_t *ocnet_conn,
             char *buf, int len);
-int  onc_connection_grab(onc_connection_s_t *onc_conn,
+int  ocnet_connection_grab(ocnet_connection_t *ocnet_conn,
             char *buf, int len);
-int  onc_connection_eof(onc_connection_s_t *onc_conn);
-int  onc_connection_data_available(onc_connection_s_t *onc_conn, void *lfds);
-void onc_connection_del(onc_connection_s_t *onc_conn);
+int  ocnet_connection_eof(ocnet_connection_t *ocnet_conn);
+int  ocnet_connection_data_available(ocnet_connection_t *ocnet_conn, void *lfds);
+void ocnet_connection_del(ocnet_connection_t *ocnet_conn);
 
 #ifdef __cplusplus
 }
