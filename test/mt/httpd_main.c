@@ -2,7 +2,7 @@
 #include <signal.h>
 #include <unistd.h>
 
-#include "onhttpd.h"
+#include "ocnet_httpd.h"
 
 static int  g_running = 0;
 
@@ -13,18 +13,18 @@ static void __sigint_handler(int sig)
 
 int main(int argc, char *argv[])
 {
-    if (onc_httpd_init(1, NULL) < 0) {
+    if (ocnet_httpd_init(1, NULL) < 0) {
         return -1;
     }
 
-    if ((onc_httpd_listen(onc_iport_parse_ip("127.0.0.1"), 10688) < 0) ||
-            (onc_httpd_listen(onc_iport_parse_ip("127.0.0.1"), 10689) < 0)) {
-        onc_httpd_final();
+    if ((ocnet_httpd_listen(ocnet_iport_parse_ip("127.0.0.1"), 10688) < 0) ||
+            (ocnet_httpd_listen(ocnet_iport_parse_ip("127.0.0.1"), 10689) < 0)) {
+        ocnet_httpd_final();
         return -1;
     }
 
-    if (onc_httpd_start() < 0) {
-        onc_httpd_final();
+    if (ocnet_httpd_start() < 0) {
+        ocnet_httpd_final();
         return -1;
     }
 
@@ -35,8 +35,8 @@ int main(int argc, char *argv[])
         sleep(5);
     } while (1 == g_running);
 
-    onc_httpd_stop();
-    onc_httpd_final();
+    ocnet_httpd_stop();
+    ocnet_httpd_final();
 
     return 0;
 }
